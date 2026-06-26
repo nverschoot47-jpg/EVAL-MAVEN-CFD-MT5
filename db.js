@@ -7,20 +7,32 @@
 const { Pool } = require("pg");
 
 const DB_URL = process.env.DATABASE_URL;
-if (!DB_URL) throw new Error("DATABASE_URL environment variable is required");
+const DB_ENABLED = !!DB_URL;
 
-const pool = new Pool({
-  connectionString:        DB_URL,
-  ssl:                     DB_URL.includes(".railway.internal") ? false : { rejectUnauthorized: false },
-  max:                     8,
-  connectionTimeoutMillis: 15000,
-  idleTimeoutMillis:       30000,
-  statement_timeout:       10000,
-});
-pool.on("error", (err) => console.error("[DB Pool] error:", err.message));
+if (!DB_ENABLED) {
+  console.warn("[DB] DATABASE_URL not set — running WITHOUT persistence (in-memory only). " +
+               "Signal log, closed trades, ghost history, and equity curve will NOT survive a restart.");
+}
+
+const pool = DB_ENABLED
+  ? new Pool({
+      connectionString:        DB_URL,
+      ssl:                     DB_URL.includes(".railway.internal") ? false : { rejectUnauthorized: false },
+      max:                     8,
+      connectionTimeoutMillis: 15000,
+      idleTimeoutMillis:       30000,
+      statement_timeout:       10000,
+    })
+  : null;
+
+if (pool) pool.on("error", (err) => console.error("[DB Pool] error:", err.message));
 
 // ── initDB ────────────────────────────────────────────────────────
 async function initDB() {
+  if (!DB_ENABLED) {
+    console.log("[DB] Skipping initDB — running without persistence");
+    return;
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -346,7 +358,12 @@ async function initDB() {
 }
 
 // ── Daily trade counter ────────────────────────────────────────────
+const _memDailyCounter = {};
 async function getNextDailyCount(dateStr) {
+  if (!DB_ENABLED) {
+    _memDailyCounter[dateStr] = (_memDailyCounter[dateStr] || 0) + 1;
+    return _memDailyCounter[dateStr];
+  }
   const r = await pool.query(`
     INSERT INTO daily_counter (date_str, count) VALUES ($1, 1)
     ON CONFLICT (date_str) DO UPDATE SET count = daily_counter.count + 1
@@ -357,6 +374,7 @@ async function getNextDailyCount(dateStr) {
 
 // ── Signal log ─────────────────────────────────────────────────────
 async function logSignal(data) {
+  if (!DB_ENABLED) return;
   try {
     await pool.query(`
       INSERT INTO signal_log (
@@ -382,6 +400,7 @@ async function logSignal(data) {
 }
 
 async function loadSignalLog(limit = 200) {
+  if (!DB_ENABLED) return [];
   try {
     const r = await pool.query(`
       SELECT
@@ -411,6 +430,7 @@ async function loadSignalLog(limit = 200) {
 
 // ── Closed trades ──────────────────────────────────────────────────
 async function saveClosedTrade(t) {
+  if (!DB_ENABLED) return;
   try {
     await pool.query(`
       INSERT INTO closed_trades (
@@ -448,6 +468,7 @@ async function saveClosedTrade(t) {
 }
 
 async function loadClosedTrades(limit = 200) {
+  if (!DB_ENABLED) return [];
   try {
     const r = await pool.query(`
       SELECT
@@ -479,6 +500,7 @@ async function loadClosedTrades(limit = 200) {
 
 // ── Ghost state ────────────────────────────────────────────────────
 async function saveGhostState(g) {
+  if (!DB_ENABLED) return;
   try {
     await pool.query(`
       INSERT INTO ghost_state (
@@ -525,6 +547,7 @@ async function saveGhostState(g) {
 }
 
 async function loadAllGhostStates() {
+  if (!DB_ENABLED) return [];
   try {
     const r = await pool.query(`
       SELECT
@@ -559,6 +582,7 @@ async function loadAllGhostStates() {
 }
 
 async function deleteGhostState(positionId) {
+  if (!DB_ENABLED) return;
   try {
     await pool.query("DELETE FROM ghost_state WHERE position_id = $1", [positionId]);
   } catch (e) { console.warn("[!] deleteGhostState:", e.message); }
@@ -566,6 +590,7 @@ async function deleteGhostState(positionId) {
 
 // ── Ghost trades (finalized) ───────────────────────────────────────
 async function saveGhostTrade(g) {
+  if (!DB_ENABLED) return;
   try {
     await pool.query(`
       INSERT INTO ghost_trades (
@@ -621,6 +646,7 @@ async function saveGhostTrade(g) {
 }
 
 async function loadGhostTrades(from = null, to = null, limit = 300) {
+  if (!DB_ENABLED) return [];
   try {
     const params = [];
     const conds  = [];
@@ -664,6 +690,7 @@ async function loadGhostTrades(from = null, to = null, limit = 300) {
 
 // ── Equity curve ───────────────────────────────────────────────────
 async function saveEquity(balance, equity, openPnl, openCount) {
+  if (!DB_ENABLED) return;
   try {
     await pool.query(
       "INSERT INTO equity_curve (balance, equity, open_pnl, open_count) VALUES ($1,$2,$3,$4)",
@@ -673,6 +700,7 @@ async function saveEquity(balance, equity, openPnl, openCount) {
 }
 
 async function loadEquityCurve(limit = 200) {
+  if (!DB_ENABLED) return [];
   try {
     const r = await pool.query(`
       SELECT
@@ -690,6 +718,7 @@ async function loadEquityCurve(limit = 200) {
 
 // ── Performance stats per optimizer key ───────────────────────────
 async function loadPerformanceByKey() {
+  if (!DB_ENABLED) return [];
   try {
     // Get all ghost trades grouped by optimizer key
     const r = await pool.query(`
@@ -711,7 +740,7 @@ async function loadPerformanceByKey() {
 }
 
 module.exports = {
-  pool, initDB,
+  pool, initDB, DB_ENABLED,
   getNextDailyCount,
   logSignal, loadSignalLog,
   saveClosedTrade, loadClosedTrades,
