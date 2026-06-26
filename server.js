@@ -1134,6 +1134,7 @@ app.get("/api/performance-by-key", async (req, res) => {
 
 // ── DB inspect: check what tables and rows exist ─────────────────
 app.get("/api/db-inspect", async (req, res) => {
+  if (!db.DB_ENABLED) return res.json({ dbEnabled: false, message: "Running without a database (DATABASE_URL not set)", openPositionsInMemory: openPositions.size });
   try {
     // List all tables
     const tables = await db.pool.query(`
@@ -1169,6 +1170,7 @@ app.get("/api/db-inspect", async (req, res) => {
 // ── Migration: pull old ghost data into new schema ────────────────
 app.post("/api/migrate-old-data", async (req, res) => {
   if (!checkSecret(req, res)) return;
+  if (!db.DB_ENABLED) return res.json({ migrated: {}, errors: ["No database configured (DATABASE_URL not set) — nothing to migrate"] });
   const report = { migrated: {}, errors: [] };
   try {
     // Try to read old ghost_state format (v14 had different columns)
@@ -2057,6 +2059,9 @@ setInterval(()=>{const a=document.querySelector('.pg.on');if(a?.id==='p-sig')loa
 // BACKGROUND INIT
 // ════════════════════════════════════════════════════════════════
 async function initBackground() {
+  console.log(db.DB_ENABLED
+    ? "[PRONTO-AI] DATABASE_URL is set — persistence enabled"
+    : "[PRONTO-AI] No DATABASE_URL — running in-memory only, no persistence across restarts");
   // DB
   let retries = 0;
   while (retries < 5) {
@@ -2116,22 +2121,24 @@ async function initBackground() {
     }
     // Check: if a ghost state position is also closed in closed_trades with SL,
     // mark it as finalized so it shows FINISHED in ghost tracker
-    try {
-      const slClosed = await db.pool.query(
-        `SELECT position_id FROM closed_trades WHERE close_reason='sl' AND position_id IS NOT NULL`
-      );
-      const slIds = new Set(slClosed.rows.map(r=>r.position_id));
-      let markedSL = 0;
-      for (const [id, pos] of openPositions) {
-        if (slIds.has(id) && pos.ghost && !pos.ghost.phantomSLHit) {
-          pos.ghost.phantomSLHit = true;
-          pos.ghost.mt5CloseReason = 'sl';
-          pos.ghostFinalized = true;
-          markedSL++;
+    if (db.DB_ENABLED) {
+      try {
+        const slClosed = await db.pool.query(
+          `SELECT position_id FROM closed_trades WHERE close_reason='sl' AND position_id IS NOT NULL`
+        );
+        const slIds = new Set(slClosed.rows.map(r=>r.position_id));
+        let markedSL = 0;
+        for (const [id, pos] of openPositions) {
+          if (slIds.has(id) && pos.ghost && !pos.ghost.phantomSLHit) {
+            pos.ghost.phantomSLHit = true;
+            pos.ghost.mt5CloseReason = 'sl';
+            pos.ghostFinalized = true;
+            markedSL++;
+          }
         }
-      }
-      if (markedSL > 0) console.log(`[DB] Marked ${markedSL} ghost states as SL-finalized`);
-    } catch(e) { console.warn('[DB] SL check failed:', e.message); }
+        if (markedSL > 0) console.log(`[DB] Marked ${markedSL} ghost states as SL-finalized`);
+      } catch(e) { console.warn('[DB] SL check failed:', e.message); }
+    }
     console.log(`[DB] Restored ${openPositions.size} ghost states`);
   } catch (e) { console.error("[DB] restore failed:", e.message); }
 
