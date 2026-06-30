@@ -19,7 +19,7 @@ const DEFAULT_RISK_PCT = 0.000375;
 // which often pushes it under the 0.01 lot floor and caps real risk
 // far below target. US100.cash stays at 1x (unchanged behavior).
 const RISK_MULTIPLIER = {
-  "XAUUSD":     4.0,
+  "XAUUSD":     8.0,
   "US100.cash": 1.0,
 };
 
