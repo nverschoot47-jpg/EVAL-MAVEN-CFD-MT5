@@ -155,10 +155,10 @@ const BLOCKED_SYMBOLS = new Set([
 
 // Time-based block windows (Brussels wall-clock, hhmm format, end-exclusive)
 // XAUUSD     blocked 14:00–15:00
-// US100.cash blocked 11:00–14:00
+// US100.cash blocked 11:00–16:00
 const TIME_BLOCK_WINDOWS = {
   "XAUUSD":     [{ start: 1400, end: 1500 }],
-  "US100.cash": [{ start: 1100, end: 1400 }],
+  "US100.cash": [{ start: 1100, end: 1600 }],
 };
 
 // Returns the matching window if the symbol is time-blocked right now, else null
@@ -179,16 +179,17 @@ function _fmtHHMM(n) {
 
 // TP risk-reward per symbol per Brussels time window (end-exclusive).
 // Anything not matched uses DEFAULT_TP_RR.
-//   XAUUSD     09:00-11:00 -> 1.0 RR ,  15:00-17:00 -> 3.0 RR
-//   US100.cash 08:00-10:00 -> 2.0 RR
+//   XAUUSD     09:00-11:00 -> 1.0 RR , 12:00-13:00 -> 3.0 RR , 15:00-17:00 -> 3.0 RR
+//   US100.cash 08:00-11:00 -> 2.0 RR
 const DEFAULT_TP_RR = 1.5;
 const TP_RR_WINDOWS = {
   "XAUUSD": [
     { start: 900,  end: 1100, rr: 1.0 },
+    { start: 1200, end: 1300, rr: 3.0 },
     { start: 1500, end: 1700, rr: 3.0 },
   ],
   "US100.cash": [
-    { start: 800,  end: 1000, rr: 2.0 },
+    { start: 800,  end: 1100, rr: 2.0 },
   ],
 };
 
