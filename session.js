@@ -14,6 +14,15 @@ const TIMEZONE = "Europe/Brussels";
 // Risk: 0.0375% of equity per trade
 const DEFAULT_RISK_PCT = 0.000375;
 
+// Per-symbol risk multiplier — applied on top of DEFAULT_RISK_PCT.
+// XAUUSD gets 2x because its lot formula divides by 100 (100oz/lot),
+// which often pushes it under the 0.01 lot floor and caps real risk
+// far below target. US100.cash stays at 1x (unchanged behavior).
+const RISK_MULTIPLIER = {
+  "XAUUSD":     2.0,
+  "US100.cash": 1.0,
+};
+
 // SL buffer: webhook gives sl_pct (e.g. 0.003 = 0.3%)
 // We multiply by 1.5 to account for spread + timing lag
 const SL_BUFFER_MULT = 1.5;
@@ -217,7 +226,7 @@ function canOpenNewTrade(rawSymbol, date = null) {
 }
 
 module.exports = {
-  TIMEZONE, DEFAULT_RISK_PCT, SL_BUFFER_MULT,
+  TIMEZONE, DEFAULT_RISK_PCT, SL_BUFFER_MULT, RISK_MULTIPLIER,
   BROKER, BROKER_SYMBOL_MAP,
   SYMBOL_CATALOG, SYMBOL_ALIASES,
   getBrusselsComponents, getBrusselsDateStr,
