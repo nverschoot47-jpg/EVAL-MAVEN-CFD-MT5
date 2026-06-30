@@ -163,10 +163,8 @@ const BLOCKED_SYMBOLS = new Set([
 ]);
 
 // Time-based block windows (Brussels wall-clock, hhmm format, end-exclusive)
-// XAUUSD     blocked 08:00–13:00
 // US100.cash blocked 11:00–16:00
 const TIME_BLOCK_WINDOWS = {
-  "XAUUSD":     [{ start: 800,  end: 1300 }],
   "US100.cash": [{ start: 1100, end: 1600 }],
 };
 
