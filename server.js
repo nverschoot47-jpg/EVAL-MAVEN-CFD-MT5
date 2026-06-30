@@ -34,7 +34,7 @@ const cron    = require("node-cron");
 
 const db = require("./db");
 const {
-  DEFAULT_RISK_PCT, SL_BUFFER_MULT,
+  DEFAULT_RISK_PCT, SL_BUFFER_MULT, RISK_MULTIPLIER,
   BROKER, BROKER_SYMBOL_MAP,
   getBrusselsDateStr, getSession,
   normalizeSymbol, getSymbolInfo,
@@ -932,7 +932,8 @@ app.post("/webhook", async (req, res) => {
     : parseFloat((execPrice - slDist * tpRR).toFixed(6));
 
   // Lot calculation
-  const riskEur  = parseFloat((latestEquity * DEFAULT_RISK_PCT).toFixed(2));
+  const riskMult = RISK_MULTIPLIER[symbol] ?? 1.0;
+  const riskEur  = parseFloat((latestEquity * DEFAULT_RISK_PCT * riskMult).toFixed(2));
   const lotNom   = slDist > 0 ? riskEur / slDist : 0.01;
   const lots     = symInfo.type === "index"
     ? Math.max(0.01, parseFloat(lotNom.toFixed(2)))
@@ -948,7 +949,7 @@ app.post("/webhook", async (req, res) => {
   const vwapMap = { above: "ABV", below: "BLW", unknown: "UNK" };
   const mt5Comment = `${symbol.slice(0, 6)} ${direction === "buy" ? "B" : "S"}-${sessMap[session] ?? "NY"}-${vwapMap[vwapPos] ?? "UNK"} ${dailyLabel}`;
 
-  console.log(`[Webhook] ${symbol} ${direction.toUpperCase()} | exec=${execPrice} slDist=${slDist.toFixed(4)} (${(slPct * 100).toFixed(3)}%×${SL_BUFFER_MULT}) | lots=${lots} riskEur=${riskEur} | ${dailyLabel}`);
+  console.log(`[Webhook] ${symbol} ${direction.toUpperCase()} | exec=${execPrice} slDist=${slDist.toFixed(4)} (${(slPct * 100).toFixed(3)}%×${SL_BUFFER_MULT}) | lots=${lots} riskEur=${riskEur} (mult=${riskMult}x) | ${dailyLabel}`);
 
   // ── Place order on MT5 ────────────────────────────────────────
   let positionId;
